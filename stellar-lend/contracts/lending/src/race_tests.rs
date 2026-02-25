@@ -58,3 +58,40 @@ fn test_intra_block_borrow_repay() {
     let debt = client.get_user_debt(&user);
     assert_eq!(debt.borrowed_amount, 5_000);
 }
+
+#[test]
+fn test_intra_block_full_lifecycle() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let (client, _admin, user, asset, collateral_asset) = setup_race_test(&env);
+
+    client.deposit(&user, &collateral_asset, &100_000);
+    client.borrow(&user, &asset, &20_000, &collateral_asset, &40_000);
+    client.repay(&user, &asset, &20_000);
+    client.withdraw(&user, &collateral_asset, &50_000);
+
+    let pos_dep = client.get_user_collateral_deposit(&user, &collateral_asset);
+    assert_eq!(pos_dep.amount, 50_000);
+    
+    let debt = client.get_user_debt(&user);
+    assert_eq!(debt.borrowed_amount, 0);
+}
+
+#[test]
+fn test_intra_block_multi_user_interaction() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let (client, _admin, user1, asset, _collateral_asset) = setup_race_test(&env);
+    let user2 = Address::generate(&env);
+
+    client.deposit(&user1, &asset, &10_000);
+    client.deposit(&user2, &asset, &20_000);
+    client.withdraw(&user1, &asset, &5_000);
+    client.withdraw(&user2, &asset, &10_000);
+
+    let pos1 = client.get_user_collateral_deposit(&user1, &asset);
+    let pos2 = client.get_user_collateral_deposit(&user2, &asset);
+
+    assert_eq!(pos1.amount, 5_000);
+    assert_eq!(pos2.amount, 10_000);
+}
