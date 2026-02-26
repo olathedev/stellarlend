@@ -1,6 +1,6 @@
 use soroban_sdk::{testutils::Address as _, Address, BytesN, Env, Error, InvokeError};
 
-use crate::{LendingContract, LendingContractClient, UpgradeStage};
+use crate::{LendingContract, LendingContractClient, UpgradeError, UpgradeStage};
 
 fn hash(env: &Env, b: u8) -> BytesN<32> {
     BytesN::from_array(env, &[b; 32])
@@ -14,8 +14,13 @@ fn setup(env: &Env, required_approvals: u32) -> (LendingContractClient<'_>, Addr
     (client, admin)
 }
 
-fn assert_failed<T>(_result: T) {
-    // Placeholder to bypass type checks while debugging other errors
+fn assert_contract_error<T>(result: Result<T, InvokeError>, expected: UpgradeError) {
+    assert_eq!(
+        result,
+        Err(InvokeError::Abort(Error::from_contract_error(
+            expected as u32
+        )))
+    );
 }
 
 /// Verifies initialization and baseline status fields.
@@ -37,9 +42,10 @@ fn test_init_rejects_zero_threshold() {
     let client = LendingContractClient::new(&env, &contract_id);
     let admin = Address::generate(&env);
 
-    // Use try_ and a dummy return type for the assert_failed helper
-    let result = client.try_upgrade_init(&admin, &hash(&env, 1), &0);
-    assert!(result.is_err());
+    assert_contract_error(
+        client.try_upgrade_init(&admin, &hash(&env, 1), &0),
+        UpgradeError::InvalidThreshold,
+    );
 }
 
 #[test]
@@ -51,7 +57,7 @@ fn test_add_approver_admin_only() {
     let stranger = Address::generate(&env);
 
     let denied = client.try_upgrade_add_approver(&stranger, &approver);
-    assert_failed(denied);
+    assert_contract_error(denied, UpgradeError::NotAuthorized);
 
     client.upgrade_add_approver(&admin, &approver);
 }
@@ -126,5 +132,96 @@ fn test_upgrade_rollback_restores_previous() {
     assert_eq!(
         client.upgrade_status(&proposal_id).stage,
         UpgradeStage::RolledBack
+    );
+}
+
+#[test]
+fn test_upgrade_rejects_unauthorized_approve_and_execute() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let (client, admin) = setup(&env, 2);
+    let approver = Address::generate(&env);
+    let stranger = Address::generate(&env);
+    client.upgrade_add_approver(&admin, &approver);
+
+    let proposal_id = client.upgrade_propose(&admin, &hash(&env, 2), &1);
+    assert_contract_error(
+        client.try_upgrade_approve(&stranger, &proposal_id),
+        UpgradeError::NotAuthorized,
+    );
+
+    client.upgrade_approve(&approver, &proposal_id);
+    assert_contract_error(
+        client.try_upgrade_execute(&stranger, &proposal_id),
+        UpgradeError::NotAuthorized,
+    );
+}
+
+#[test]
+fn test_upgrade_rotation_revokes_old_approver() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let (client, admin) = setup(&env, 2);
+    let old_approver = Address::generate(&env);
+    let new_approver = Address::generate(&env);
+    client.upgrade_add_approver(&admin, &old_approver);
+    client.upgrade_add_approver(&admin, &new_approver);
+
+    let first_upgrade = client.upgrade_propose(&admin, &hash(&env, 2), &1);
+    client.upgrade_approve(&old_approver, &first_upgrade);
+    client.upgrade_execute(&old_approver, &first_upgrade);
+    assert_eq!(client.current_version(), 1);
+
+    client.upgrade_remove_approver(&admin, &old_approver);
+
+    let second_upgrade = client.upgrade_propose(&admin, &hash(&env, 3), &2);
+    assert_contract_error(
+        client.try_upgrade_approve(&old_approver, &second_upgrade),
+        UpgradeError::NotAuthorized,
+    );
+    client.upgrade_approve(&new_approver, &second_upgrade);
+    assert_contract_error(
+        client.try_upgrade_execute(&old_approver, &second_upgrade),
+        UpgradeError::NotAuthorized,
+    );
+    client.upgrade_execute(&new_approver, &second_upgrade);
+    assert_eq!(client.current_version(), 2);
+}
+
+#[test]
+fn test_upgrade_remove_approver_enforces_threshold() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let (client, admin) = setup(&env, 2);
+    let approver = Address::generate(&env);
+    client.upgrade_add_approver(&admin, &approver);
+
+    assert_contract_error(
+        client.try_upgrade_remove_approver(&admin, &approver),
+        UpgradeError::InvalidThreshold,
+    );
+}
+
+#[test]
+fn test_upgrade_invalid_attempts() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let (client, admin) = setup(&env, 2);
+    let approver = Address::generate(&env);
+    client.upgrade_add_approver(&admin, &approver);
+
+    let proposal_id = client.upgrade_propose(&admin, &hash(&env, 2), &1);
+    client.upgrade_approve(&approver, &proposal_id);
+    assert_contract_error(
+        client.try_upgrade_approve(&approver, &proposal_id),
+        UpgradeError::AlreadyApproved,
+    );
+    assert_contract_error(
+        client.try_upgrade_execute(&approver, &proposal_id),
+        UpgradeError::InvalidStatus,
+    );
+    assert_contract_error(
+        client.try_upgrade_propose(&admin, &hash(&env, 3), &1),
+        UpgradeError::InvalidVersion,
     );
 }

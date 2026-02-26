@@ -353,6 +353,10 @@ impl LendingContract {
         upgrade::UpgradeManager::add_approver(env, caller, approver);
     }
 
+    pub fn upgrade_remove_approver(env: Env, caller: Address, approver: Address) {
+        upgrade::UpgradeManager::remove_approver(env, caller, approver);
+    }
+
     pub fn upgrade_propose(
         env: Env,
         caller: Address,
@@ -385,7 +389,7 @@ impl LendingContract {
     pub fn current_version(env: Env) -> u32 {
         upgrade::UpgradeManager::current_version(env)
     }
-  
+
     /// Initialize borrow settings (admin only)
     pub fn initialize_borrow_settings(
         env: Env,
