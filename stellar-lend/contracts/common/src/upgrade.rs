@@ -64,6 +64,7 @@ enum UpgradeKey {
 pub struct UpgradeManager;
 
 impl UpgradeManager {
+    #[allow(deprecated)]
     pub fn init(env: Env, admin: Address, current_wasm_hash: BytesN<32>, required_approvals: u32) {
         if env.storage().persistent().has(&UpgradeKey::Admin) {
             panic_with_error!(&env, UpgradeError::AlreadyInitialized);
@@ -96,6 +97,7 @@ impl UpgradeManager {
             .publish((symbol_short!("up_init"), admin), required_approvals);
     }
 
+    #[allow(deprecated)]
     pub fn add_approver(env: Env, caller: Address, approver: Address) {
         caller.require_auth();
         Self::assert_admin(&env, &caller);
@@ -112,6 +114,7 @@ impl UpgradeManager {
             .publish((symbol_short!("up_apadd"), caller, approver), ());
     }
 
+    #[allow(deprecated)]
     pub fn upgrade_propose(
         env: Env,
         caller: Address,
@@ -164,6 +167,7 @@ impl UpgradeManager {
         id
     }
 
+    #[allow(deprecated)]
     pub fn upgrade_approve(env: Env, caller: Address, proposal_id: u64) -> u32 {
         caller.require_auth();
         Self::assert_approver(&env, &caller);
@@ -190,6 +194,7 @@ impl UpgradeManager {
         count
     }
 
+    #[allow(deprecated)]
     pub fn upgrade_execute(env: Env, caller: Address, proposal_id: u64) {
         caller.require_auth();
         Self::assert_approver(&env, &caller);
@@ -225,6 +230,7 @@ impl UpgradeManager {
         );
     }
 
+    #[allow(deprecated)]
     pub fn upgrade_rollback(env: Env, caller: Address, proposal_id: u64) {
         caller.require_auth();
         Self::assert_admin(&env, &caller);
