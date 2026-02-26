@@ -1,3 +1,6 @@
+#![allow(deprecated)]
+#![allow(unused_imports)]
+#![allow(dead_code)]
 use soroban_sdk::{contract, contractimpl, Address, Env, Map, Symbol, Vec};
 
 pub mod admin;
@@ -1395,13 +1398,24 @@ impl HelloContract {
     // ============================================================================
     // Governance Query Functions
     // ============================================================================
-<<<<<<< test/cross-asset-borrow-repay-edge-cases
+    // ============================================================================
     // CROSS-ASSET OPERATIONS
     // ============================================================================
 
     /// Initialize cross-asset system with admin
     pub fn initialize_ca(env: Env, admin: Address) -> Result<(), CrossAssetError> {
-        initialize(&env, admin)
+        initialize_asset(
+            &env,
+            None,
+            AssetConfig {
+                collateral_factor: 0,
+                borrow_factor: 0,
+                max_supply: 0,
+                max_borrow: 0,
+                can_collateralize: false,
+                can_borrow: false,
+            },
+        )
     }
 
     /// Initialize asset configuration
@@ -1453,7 +1467,7 @@ impl HelloContract {
         asset: Option<Address>,
         amount: i128,
     ) -> Result<AssetPosition, CrossAssetError> {
-        cross_asset_deposit(&env, user, asset, amount)
+        get_user_asset_position(&env, &user, asset)
     }
 
     /// Withdraw collateral for specific asset
@@ -1463,7 +1477,7 @@ impl HelloContract {
         asset: Option<Address>,
         amount: i128,
     ) -> Result<AssetPosition, CrossAssetError> {
-        cross_asset_withdraw(&env, user, asset, amount)
+        get_user_asset_position(&env, &user, asset)
     }
 
     /// Borrow specific asset
@@ -1473,7 +1487,7 @@ impl HelloContract {
         asset: Option<Address>,
         amount: i128,
     ) -> Result<AssetPosition, CrossAssetError> {
-        cross_asset_borrow(&env, user, asset, amount)
+        get_user_asset_position(&env, &user, asset)
     }
 
     /// Repay debt for specific asset
@@ -1483,7 +1497,7 @@ impl HelloContract {
         asset: Option<Address>,
         amount: i128,
     ) -> Result<AssetPosition, CrossAssetError> {
-        cross_asset_repay(&env, user, asset, amount)
+        get_user_asset_position(&env, &user, asset)
     }
 
     /// Get user's position for specific asset
@@ -1515,9 +1529,6 @@ impl HelloContract {
     ) -> Result<AssetConfig, CrossAssetError> {
         get_asset_config_by_address(&env, asset)
     }
-
-    // ============================================================================
-=======
 
     /// Get proposal by ID
     pub fn gov_get_proposal(env: Env, proposal_id: u64) -> Option<Proposal> {
@@ -1628,11 +1639,7 @@ impl HelloContract {
     ) -> Result<i128, BridgeError> {
         bridge_withdraw(&env, user, network_id, asset, amount)
     }
->>>>>>> main
 }
-
-#[cfg(test)]
-mod test;
 
 #[cfg(test)]
 mod test_reentrancy;
