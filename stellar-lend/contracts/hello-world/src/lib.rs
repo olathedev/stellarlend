@@ -23,17 +23,17 @@ pub mod reserve;
 pub mod risk_management;
 pub mod risk_params;
 pub mod storage;
+pub mod treasury;
 pub mod types;
 pub mod withdraw;
-
-#[cfg(test)]
-// mod tests;
 
 use crate::deposit::DepositDataKey;
 use crate::risk_management::RiskManagementError;
 use crate::interest_rate::InterestRateError;
 
-/// Helper function to require admin authorization
+// ─── Admin helper ─────────────────────────────────────────────────────────────
+
+/// Require that `caller` is the stored admin; panics via `?` on failure.
 fn require_admin(env: &Env, caller: &Address) -> Result<(), RiskManagementError> {
     caller.require_auth();
     let admin_key = DepositDataKey::Admin;
@@ -57,6 +57,30 @@ pub struct HelloContract;
 impl HelloContract {
     pub fn hello(env: Env) -> String {
         String::from_str(&env, "Hello")
+    }
+
+    pub fn gov_initialize(
+        env: Env,
+        admin: Address,
+        vote_token: Address,
+        voting_period: Option<u64>,
+        execution_delay: Option<u64>,
+        quorum_bps: Option<u32>,
+        proposal_threshold: Option<i128>,
+        timelock_duration: Option<u64>,
+        default_voting_threshold: Option<i128>,
+    ) -> Result<(), governance::GovernanceError> {
+        governance::initialize(
+            &env,
+            admin,
+            vote_token,
+            voting_period,
+            execution_delay,
+            quorum_bps,
+            proposal_threshold,
+            timelock_duration,
+            default_voting_threshold,
+        )
     }
 
     pub fn initialize(env: Env, admin: Address) -> Result<(), RiskManagementError> {
@@ -139,6 +163,58 @@ impl HelloContract {
     }
 
     // -------------------------------------------------------------------------
+    // Treasury & Fee Management
+    // -------------------------------------------------------------------------
+
+    /// Set the protocol treasury address (admin-only)
+    pub fn set_treasury(env: Env, caller: Address, treasury: Address) -> Result<(), treasury::TreasuryError> {
+        treasury::set_treasury(&env, caller, treasury)
+    }
+
+    /// Return the configured treasury address
+    pub fn get_treasury(env: Env) -> Option<Address> {
+        treasury::get_treasury(&env)
+    }
+
+    /// Return accumulated protocol reserves for the given asset
+    pub fn get_reserve_balance(env: Env, asset: Option<Address>) -> i128 {
+        treasury::get_reserve_balance(&env, asset)
+    }
+
+    /// Withdraw protocol reserves to a recipient (admin-only)
+    pub fn claim_reserves(
+        env: Env,
+        caller: Address,
+        asset: Option<Address>,
+        recipient: Address,
+        amount: i128,
+    ) -> Result<(), treasury::TreasuryError> {
+        treasury::claim_reserves(&env, caller, asset, recipient, amount)
+    }
+
+    /// Update protocol fee percentages (admin-only)
+    pub fn set_fee_config(
+        env: Env,
+        caller: Address,
+        interest_fee_bps: i128,
+        liquidation_fee_bps: i128,
+    ) -> Result<(), treasury::TreasuryError> {
+        treasury::set_fee_config(
+            &env,
+            caller,
+            treasury::TreasuryFeeConfig {
+                interest_fee_bps,
+                liquidation_fee_bps,
+            },
+        )
+    }
+
+    /// Return the current fee configuration
+    pub fn get_fee_config(env: Env) -> treasury::TreasuryFeeConfig {
+        treasury::get_fee_config(&env)
+    }
+
+    // -------------------------------------------------------------------------
     // Multi-Asset Collateral
     // -------------------------------------------------------------------------
 
@@ -168,3 +244,5 @@ mod test_zero_amount;
 mod flash_loan_test;
 #[cfg(test)]
 mod multi_collateral_test;
+#[cfg(test)]
+mod treasury_test;
