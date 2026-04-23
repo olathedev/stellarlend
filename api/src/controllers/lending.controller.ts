@@ -282,6 +282,47 @@ export const getTransactionHistory = async (
   }
 };
 
+export const streamTransactionHistory = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+) => {
+  const pageSize = req.query.pageSize ? Number(req.query.pageSize) : undefined;
+
+  const abort = new AbortController();
+  req.on('close', () => abort.abort());
+
+  res.setHeader('Content-Type', 'application/x-ndjson');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.flushHeaders();
+
+  try {
+    const stellarService = new StellarService();
+    const stream = stellarService.streamTransactionHistory(
+      req.params.userAddress,
+      pageSize,
+      abort.signal
+    );
+
+    for await (const item of stream) {
+      if (abort.signal.aborted) break;
+      res.write(JSON.stringify(item) + '\n');
+    }
+
+    if (!abort.signal.aborted) {
+      res.end();
+    }
+  } catch (error) {
+    if (!res.headersSent) {
+      next(error);
+    } else {
+      res.write(JSON.stringify({ error: 'Stream interrupted' }) + '\n');
+      res.end();
+    }
+  }
+};
+
 export const getAuditLogs = (req: Request, res: Response) => {
   const { action, actor, status, from, to, limit, offset } = req.query as Record<string, string>;
   const entries = auditLogService.search({
